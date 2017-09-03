@@ -1,0 +1,18 @@
+BACKUP ~PS_Tileset\backup~
+AUTHOR ~Sam.~
+VERSION ~v0.0.0~
+
+ALWAYS
+  INCLUDE ~%MOD_FOLDER%/lib/ps_tileset_lib.tpa~ // Include the PS_Tileset function library
+END
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Repair Header~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+COPY ~%MOD_FOLDER%/tilesets~ ~%MOD_FOLDER%/processed~
+  LPF ps_tileset_repair_header END
+//PRINT "Test"
+
+

@@ -1,0 +1,31 @@
+//////////////////////////////////////////////////////////////////////////////////
+////////////////////////	ps_tileset_repair_header	//////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+// This is a WeiDU patch function that repairs a couple of uncommon errors in tileset headers caused by other programs.
+//   1) An old version of DLTCEP erroneously wrote tilesets with an invalid version string of 'V2  '.  This will be fixed.
+//   2) Old versions of Near Infinity erroneously exported tilesets without a header.  A header can be generated but it requires making
+//      some assumptions.  One assumption is that it is a palette-based tileset, but as PVRz-based tilesets did not come out until after NI
+//      was fixed, this should be a good assumption.  The second assumption is that the tile dimensions are 64x64 px, but I have never seen
+//      any other value used, so this should also be a reasonably good assumption.
+//////////////////////////////////////////////////////////////////////////////////
+DEFINE_PATCH_FUNCTION ps_tileset_repair_header BEGIN
+  READ_ASCII 0x0 Signature (4) // Signature ("TIS ")
+  PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIZ0~ = 1) OR (~%Signature%~ STRING_EQUAL_CASE ~TBC ~ = 1) OR (~%Signature%~ STRING_EQUAL_CASE ~TISC~ = 1) BEGIN // Tileset is compressed
+    PATCH_PRINT ~Tileset "%SOURCE_FILESPEC%" is compressed but compressed tilesets are not supported:  it will not be processed.~
+  END ELSE PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) BEGIN // Is an uncompressed tileset with a header
+    READ_ASCII 0x4 Version (4) // Version ("V1  ")
+	PATCH_IF (~%Version%~ STRING_EQUAL_CASE ~V2  ~ = 1) BEGIN // Tileset has invalid version
+	  WRITE_ASCIIE 0x4 ~V1  ~ // Fix the version
+	END
+  END ELSE PATCH_IF (~%SOURCE_EXT%~ STRING_EQUAL_CASE ~tis~ = 1) BEGIN // Appears to be a tileset without a header.  A header can be generated but it requires making some assumptions.
+    INSERT_BYTES 0 24 // Make room for the header
+	WRITE_ASCIIE 0x0 ~TIS ~				// Signature ("TIS ")
+	WRITE_ASCIIE 0x4 ~V1  ~				// Version ("V1  ")
+	WRITE_LONG 0x8 (SOURCE_SIZE / 5120)	// Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+	WRITE_LONG 0xc 5120					// Length of tiles section (1024+DimensionOfTile*DimensionOfTile) - assumption
+	WRITE_LONG 0x10 24					// Size of the header (24) - assumption, but a very good one
+	WRITE_LONG 0x14 64					// Dimension of 1 tile in pixels (64x64) - assumption, but a good one
+  END ELSE BEGIN
+    PATCH_PRINT ~"%SOURCE_FILESPEC%" does not appear to be a valid tileset:  it will not be processed.~
+  END
+END
