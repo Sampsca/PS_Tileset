@@ -13,6 +13,22 @@ NO_LOG_RECORD
 
 COPY ~%MOD_FOLDER%/tilesets~ ~%MOD_FOLDER%/processed~
   LPF ps_tileset_repair_header END
-//PRINT "Test"
 
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Remove Tiles~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
 
+COPY ~%MOD_FOLDER%/tilesets~ ~%MOD_FOLDER%/processed~
+  LPF ps_tileset_repair_header END
+COPY ~%MOD_FOLDER%/processed/ar0301.TIZ~ ~%MOD_FOLDER%/processed/ar0301.TIZ~
+  LPF ps_tileset_remove_tiles INT_VAR Pos = 0 Count = 1 STR_VAR Method = "Pop" END // Try to remove last tile from a compressed tileset
+COPY ~%MOD_FOLDER%/processed/AR0301.TIS~ ~%MOD_FOLDER%/processed/AR0301.TIS~
+  LPF ps_tileset_remove_tiles INT_VAR Pos = 345 Count = 23 STR_VAR Method = "RemoveAt" END // Remove 2nd to last row of tiles (a row of black tiles)
+  LPF ps_tileset_remove_tiles INT_VAR Pos = 0 Count = 22 STR_VAR Method = "Pop" END // Remove the 22 extra door tiles from end of tileset
+COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_tileset_remove_tiles INT_VAR Pos = 0 Count = 5000 STR_VAR Method = "RemoveAt" END // Remove ALL tiles from the tileset
+COPY ~%MOD_FOLDER%/processed/AR0150.TIS~ ~%MOD_FOLDER%/processed/AR0150.TIS~
+  LPF ps_tileset_remove_tiles INT_VAR Pos = 0 Count = "-10" STR_VAR Method = "Pop" END // Try some invalid inputs
+  LPF ps_tileset_remove_tiles INT_VAR Pos = "-10" Count = 5000 STR_VAR Method = "RemoveAt" END // Try some invalid inputs
+  LPF ps_tileset_remove_tiles INT_VAR Pos = 2000 Count = 10 STR_VAR Method = "RemoveAt" END // Try some invalid inputs

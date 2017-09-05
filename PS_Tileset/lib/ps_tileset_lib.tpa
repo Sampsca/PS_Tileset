@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////////////////
-////////////////////////	ps_tileset_repair_header	//////////////////////////
+////////////////////////    ps_tileset_repair_header    //////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
 // This is a WeiDU patch function that repairs a couple of uncommon errors in tileset headers caused by other programs.
 //   1) An old version of DLTCEP erroneously wrote tilesets with an invalid version string of 'V2  '.  This will be fixed.
@@ -19,8 +19,7 @@ DEFINE_PATCH_FUNCTION ps_tileset_repair_header BEGIN
 	END
   END ELSE PATCH_IF (~%SOURCE_EXT%~ STRING_EQUAL_CASE ~tis~ = 1) BEGIN // Appears to be a tileset without a header.  A header can be generated but it requires making some assumptions.
     INSERT_BYTES 0 24 // Make room for the header
-	WRITE_ASCIIE 0x0 ~TIS ~				// Signature ("TIS ")
-	WRITE_ASCIIE 0x4 ~V1  ~				// Version ("V1  ")
+	WRITE_ASCIIE 0x0 ~TIS V1  ~				// Signature ("TIS ") + Version ("V1  ")
 	WRITE_LONG 0x8 (SOURCE_SIZE / 5120)	// Count of tiles within this tileset (FileSize/LengthOfTilesSection)
 	WRITE_LONG 0xc 5120					// Length of tiles section (1024+DimensionOfTile*DimensionOfTile) - assumption
 	WRITE_LONG 0x10 24					// Size of the header (24) - assumption, but a very good one
@@ -29,3 +28,53 @@ DEFINE_PATCH_FUNCTION ps_tileset_repair_header BEGIN
     PATCH_PRINT ~"%SOURCE_FILESPEC%" does not appear to be a valid tileset:  it will not be processed.~
   END
 END
+
+//////////////////////////////////////////////////////////////////////////////////
+/////////////////////////    ps_tileset_remove_tiles    //////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+// This is a WeiDU patch function that removes tiles from a tileset using one of two methods:
+//   1) If STR_VAR Method = "Pop" : Up to INT_VAR 'Count' number of tiles will be removed from the end of the tileset.
+//   2) If STR_VAR Method = "RemoveAt" : Up to INT_VAR 'Count' number of tiles will be removed from the tileset starting at tile INT_VAR 'Pos'.
+//   Note that tiles in the tileset are 0-indexed.  That means the 'first' tile is really tile 0.
+//   This function returns the "Count" of tiles actually removed from the tileset.
+//////////////////////////////////////////////////////////////////////////////////
+DEFINE_PATCH_FUNCTION ps_tileset_remove_tiles INT_VAR Pos = 0 Count = 1 STR_VAR Method = "Pop" RET Count BEGIN
+  READ_ASCII 0x0 Signature (4)			// Signature ("TIS ")
+  READ_ASCII 0x4 Version (4)			// Version ("V1  ")
+  PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) AND (~%Version%~ STRING_EQUAL_CASE ~V1  ~ = 1) BEGIN // Is a valid tileset of appropriate version
+    READ_LONG 0x8 CountOfTiles			// Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+    READ_LONG 0xc LengthOfTilesSection	// Length of tiles section [(1024+DimensionOfTile*DimensionOfTile) OR (9)]
+    READ_LONG 0x10 SizeOfHeader			// Size of the header (24)
+    READ_LONG 0x14 DimensionOfTile		// Dimension of 1 tile in pixels (64x64)
+	PATCH_IF (Count < 0) BEGIN
+      Count = 0 // Ensure Count !< 0
+    END
+	PATCH_IF (~%Method%~ STRING_EQUAL_CASE ~Pop~ = 1) BEGIN
+	  PATCH_IF (Count > CountOfTiles) BEGIN
+	    Count = (CountOfTiles) // Ensure Count !> CountOfTiles in tileset
+	  END
+	  DELETE_BYTES (SizeOfHeader + LengthOfTilesSection * (CountOfTiles - Count)) (Count * LengthOfTilesSection) // Delete Count number of tiles from the end of the tileset
+	END ELSE PATCH_IF (~%Method%~ STRING_EQUAL_CASE ~RemoveAt~ = 1) BEGIN
+	  PATCH_IF (Pos < 0) OR (Pos > CountOfTiles) BEGIN // Ensure Pos is a valid value
+	    PATCH_PRINT ~Invalid variables passed to the function ps_tileset_remove_tiles:  Pos was %Pos% but must be between 0 and %CountOfTiles% (inclusive).  No tiles will be removed.~
+	    Pos = 0
+		Count = 0
+	  END ELSE PATCH_IF (Pos + Count > CountOfTiles) BEGIN // If you try to remove more tiles than there are in the tileset after Pos
+	    Count = (CountOfTiles - Pos) // Adjust the Count of tiles to the number of tiles in the tileset after Pos
+	  END
+	  DELETE_BYTES (SizeOfHeader + LengthOfTilesSection * Pos) (Count * LengthOfTilesSection) // Delete Count number of tiles from the tileset starting with the tile at Pos
+	END
+	CountOfTiles -= Count
+	WRITE_LONG 0x8 CountOfTiles
+  END ELSE BEGIN
+    PATCH_PRINT ~"%SOURCE_FILESPEC%" does not appear to be a valid tileset:  it will not be processed.~
+  END
+END
+
+
+
+
+
+
+
+
