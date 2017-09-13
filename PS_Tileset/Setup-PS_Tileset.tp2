@@ -14,6 +14,7 @@ NO_LOG_RECORD
 COPY ~%MOD_FOLDER%/tilesets~ ~%MOD_FOLDER%/processed~
   LPF ps_tileset_repair_header END
 
+  
 //! Test PS_Tileset /////////////////////////////////////////////////////
 BEGIN ~Remove Tiles~
 SUBCOMPONENT ~Test PS_Tileset~
@@ -32,3 +33,31 @@ COPY ~%MOD_FOLDER%/processed/AR0150.TIS~ ~%MOD_FOLDER%/processed/AR0150.TIS~
   LPF ps_tileset_remove_tiles INT_VAR Pos = 0 Count = "-10" STR_VAR Method = "Pop" END // Try some invalid inputs
   LPF ps_tileset_remove_tiles INT_VAR Pos = "-10" Count = 5000 STR_VAR Method = "RemoveAt" END // Try some invalid inputs
   LPF ps_tileset_remove_tiles INT_VAR Pos = 2000 Count = 10 STR_VAR Method = "RemoveAt" END // Try some invalid inputs
+
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Add Tiles~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Add Tiles~ BEGIN
+
+COPY ~%MOD_FOLDER%/tilesets~ ~%MOD_FOLDER%/processed~
+  LPF ps_tileset_repair_header END
+
+COPY ~%MOD_FOLDER%/processed/AR0301.TIS~ ~%MOD_FOLDER%/processed/AR0301.TIS~
+  LPF ps_tileset_add_tiles INT_VAR MaxCount = 23 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^AR0301_00[0-2][0-9].bmp$" Method = "Push" RET Count END // Add a row of black tiles to the end of the tileset
+  //LPF ps_tileset_remove_tiles INT_VAR Count = 7 STR_VAR Method = "Pop" END
+  LPF ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 23 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^AR0301_00[0-2][0-9].bmp$" Method = "InsertAt" RET Count END // Add a row of black tiles to the beginning of the tileset
+  //LPF ps_tileset_remove_tiles INT_VAR Pos = 0 Count = 7 STR_VAR Method = "RemoveAt" END
+//COPY ~%MOD_FOLDER%/processed/AR0150.tis~ ~%MOD_FOLDER%/processed/AR0150.tis~
+  //LPF ps_tileset_add_tiles INT_VAR Pos = 0 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^.+\.bmp$" Method = "Replace" RET Count END
+COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
+  LPF ps_tileset_add_tiles INT_VAR Pos = 120 MaxCount = 2 PVRz_Page = "-1" PVRz_X = 0 PVRz_Y = 0 STR_VAR Method = "Replace" RET Count END // Blank out a tile in a PVRz-based tileset using a manually specified tile
+  LPF ps_tileset_add_tiles INT_VAR Pos = 10000 STR_VAR TileDir = EVAL "%MOD_FOLDER%/processed" TileRegExp = "^AR0115.tis$" Method = "Replace" RET Count END // Duplicate the tiles in a PVRz-based tileset by loading tiles from a PVRz-based TIS
+COPY ~%MOD_FOLDER%/processed/AR0150.tis~ ~%MOD_FOLDER%/processed/AR0150.tis~
+  LPF ps_tileset_add_tiles INT_VAR Pos = 10000 STR_VAR TileDir = EVAL "%MOD_FOLDER%/processed" TileRegExp = "^AR0150.tis$" Method = "Replace" RET Count END // Duplicate the tiles in a palette-based tileset by loading tiles from a palette-based TIS
+
+END
+  
+  
