@@ -82,12 +82,13 @@ END
 //   3) If STR_VAR Method = "Replace" : Up to INT_VAR MaxCount tiles in the tileset will be replaced starting with the tile at INT_VAR Pos
 //   If the tileset is PVRz-based, the tile data can be generated from the INT_VARs PVRz_Page, PVRz_X, and PVRz_Y in which case
 //     INT_VAR MaxCount copies of this tile will be generated and added according to the Methods described above.
-//   Alternatively, up to INT_VAR MaxCount tiles will be loded from the directory-file-regexp specified by STR_VAR TileDir and STR_VAR TileRegExp
-//     and added to the tileset according to the Methods described above.
+//   Alternatively, up to INT_VAR MaxCount (default is 'all') tiles will be loaded from the directory-file-regexp specified by STR_VAR TileDir and
+//     STR_VAR TileRegExp and added to the tileset according to the Methods described above.
+//   INT_VAR Offset is the offset (in bytes) into the file, from which tiles are being loaded, at which tile data will start being loaded.
 //   Note that tiles in the tileset are 0-indexed.  That means the 'first' tile is really tile 0.
 //   This function returns the "Count" of tiles added to the tileset.
 //////////////////////////////////////////////////////////////////////////////////
-DEFINE_PATCH_FUNCTION ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 100000 PVRz_Page = "-2" PVRz_X = 0 PVRz_Y = 0 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^.+\.bmp$" Method = "Push" RET Count BEGIN
+DEFINE_PATCH_FUNCTION ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 100000 Offset = 0 PVRz_Page = "-2" PVRz_X = 0 PVRz_Y = 0 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^.+\.bmp$" Method = "Push" RET Count BEGIN
   Count = 0
   READ_ASCII 0x0 Signature (4)          // Signature ("TIS ")
   READ_ASCII 0x4 Version (4)            // Version ("V1  ")
@@ -124,7 +125,7 @@ DEFINE_PATCH_FUNCTION ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 100000 PVR
         ACTION_BASH_FOR ~%TileDir%~ ~%TileRegExp%~ BEGIN // Loop through each input file loading tiles
 		  ACTION_IF (MaxCount > 0) BEGIN
             PRINT ~Loading tile(s) from "%BASH_FOR_FILESPEC%"~
-            LAF ps_tileset_load_tile INT_VAR Size = LengthOfTilesSection Offset = 0 MaxCount STR_VAR TilePath = "%BASH_FOR_FILESPEC%" RET Tile = fk TileDataSize = kl END // Load tile(s) from input file
+            LAF ps_tileset_load_tile INT_VAR Size = LengthOfTilesSection Offset MaxCount STR_VAR TilePath = "%BASH_FOR_FILESPEC%" RET Tile = fk TileDataSize = kl END // Load tile(s) from input file
             ACTION_IF (TileDataSize >= LengthOfTilesSection) BEGIN // Ensure the tile data we loaded is of the appropriate size (compared to LengthOfTilesSection in tileset header)
               OUTER_SET MaxCount -= (TileDataSize / LengthOfTilesSection)
 			  OUTER_INNER_PATCH_SAVE NewTileData ~%NewTileData%~ BEGIN // Load internal buffer to store new tile data in
@@ -168,12 +169,37 @@ DEFINE_PATCH_FUNCTION ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 100000 PVR
 END
 
 //////////////////////////////////////////////////////////////////////////////////
+////////////////////////    ps_tileset_create_tileset    /////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+// This is a WeiDU action function that creates a tileset from a number of tiles.
+//   Up to INT_VAR MaxCount (default is 'all') tiles will be loaded from the directory-file-regexp specified by STR_VAR TileDir and
+//     STR_VAR TileRegExp and added to the new tileset.  The new tileset will be saved to the path and file name specified by STR_VAR OutTileset.
+//   INT_VAR LengthOfTilesSection is the number of bytes needed to store a tile in the tileset, usually (1024+DimensionOfTile*DimensionOfTile) or 12.
+//   INT_VAR DimensionOfTile is the dimension of 1 tile in pixels, usually "64" as tiles are usually 64x64 px.
+//   INT_VAR Offset is the offset (in bytes) into the file, from which tiles are being loaded, at which tile data will start being loaded.
+//   This function returns the "Count" of tiles added to the tileset.
+//////////////////////////////////////////////////////////////////////////////////
+DEFINE_ACTION_FUNCTION ps_tileset_create_tileset INT_VAR LengthOfTilesSection = 5120 DimensionOfTile = 64  MaxCount = 100000 Offset = 0 STR_VAR OutTileset = "" TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^.+\.bmp$" RET Count BEGIN
+  <<<<<<<< .../mymod-inlined/ps_tileset_new.tis
+>>>>>>>>
+  COPY ~.../mymod-inlined/ps_tileset_new.tis~ ~%OutTileset%~
+    PATCH_PRINT ~Creating new tileset and saving it to "%OutTileset%"~
+	INSERT_BYTES 0 24 // Make room for the header
+    WRITE_ASCIIE 0x0 ~TIS V1  ~				// Signature ("TIS ") + Version ("V1  ")
+    WRITE_LONG 0x8 0						// Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+	WRITE_LONG 0xc (LengthOfTilesSection)	// Length of tiles section (1024+DimensionOfTile*DimensionOfTile or 12)
+	WRITE_LONG 0x10 24						// Size of the header (24) - assumption, but a very good one
+	WRITE_LONG 0x14 (DimensionOfTile)		// Dimension of 1 tile in pixels (64x64)
+	LPF ps_tileset_add_tiles INT_VAR MaxCount Offset STR_VAR TileDir TileRegExp RET Count END // Add tiles to the tileset
+END
+
+//////////////////////////////////////////////////////////////////////////////////
 /////////////////////////    ps_tileset_load_tile_BMP    /////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
 // This is a WeiDU patch function that loads a tile from a 256-color, uncompressed, 8-bit bitmap; BMP Version 3 (Microsoft Windows 3.x).
 //   The BMP being patched must have the same dimensions as that of a tile in the tileset.  INT_VAR Size is used to indicate the required
-//     size of this tile (in bytes) and includes Width*Height pixels plus the 1024 byte palette.  It should be the same as LengthOfTilesSection
-//     from the tileset's header.
+//     size of this tile (in bytes) and includes Width*Height pixels plus the 1024 byte color palette.  It should be the same as
+//     LengthOfTilesSection from the tileset's header.
 //   The function returns STR_VAR fk (the tile data) and INT_VAR kl (the size in bytes of the tile data in fk).
 //////////////////////////////////////////////////////////////////////////////////
 DEFINE_PATCH_FUNCTION ps_tileset_load_tile_BMP INT_VAR Size = 5120 RET fk kl BEGIN
@@ -265,11 +291,13 @@ DEFINE_ACTION_FUNCTION ps_tileset_load_tile INT_VAR Size = 12 Offset = 0 MaxCoun
       READ_ASCII 0x0 sg (2) // Short Signature
       READ_ASCII 0x0 Signature (4) // Signature
       PATCH_IF (~%sg%~ STRING_EQUAL_CASE ~BM~ = 1) BEGIN // Is a BMP file
-        LPF ps_tileset_load_tile_BMP RET fk kl END
+        LPF ps_tileset_load_tile_BMP INT_VAR Size RET fk kl END
       END ELSE PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) BEGIN // Is a tileset with a header
         READ_LONG 0xc LengthOfTilesSection // Length of tiles section [(1024+DimensionOfTile*DimensionOfTile) OR (12)]
         PATCH_IF (LengthOfTilesSection = Size) BEGIN
-          READ_LONG 0x10 Offset // Size of the header (24)
+		  PATCH_IF (Offset = 0) BEGIN // If a reasonable offset has not been set
+            READ_LONG 0x10 Offset // Size of the header (24)
+		  END
           LPF ps_tileset_load_tile_BIN INT_VAR Size Offset MaxCount RET fk kl END
         END ELSE BEGIN
           PATCH_PRINT ~Dimensions of "%SOURCE_FILESPEC%" are incorrect for this tileset.  The tile should be %Size% bytes but is %LengthOfTilesSection% bytes.~

@@ -57,7 +57,20 @@ COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
   LPF ps_tileset_add_tiles INT_VAR Pos = 10000 STR_VAR TileDir = EVAL "%MOD_FOLDER%/processed" TileRegExp = "^AR0115.tis$" Method = "Replace" RET Count END // Duplicate the tiles in a PVRz-based tileset by loading tiles from a PVRz-based TIS
 COPY ~%MOD_FOLDER%/processed/AR0150.tis~ ~%MOD_FOLDER%/processed/AR0150.tis~
   LPF ps_tileset_add_tiles INT_VAR Pos = 10000 STR_VAR TileDir = EVAL "%MOD_FOLDER%/processed" TileRegExp = "^AR0150.tis$" Method = "Replace" RET Count END // Duplicate the tiles in a palette-based tileset by loading tiles from a palette-based TIS
+END
+  
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Create Tileset~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Create Tileset~ BEGIN
+
+LAF ps_tileset_create_tileset INT_VAR LengthOfTilesSection = 5120 DimensionOfTile = 64  MaxCount = 100000 STR_VAR OutTileset = EVAL "%MOD_FOLDER%/processed/new_tileset.tis" TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^.+\.bmp$" RET Count END // Create a new tileset from a number of BMP tiles
+LAF ps_tileset_create_tileset INT_VAR LengthOfTilesSection = 12 DimensionOfTile = 64  MaxCount = 100000 Offset = 240 STR_VAR OutTileset = EVAL "%MOD_FOLDER%/processed/new_tileset2.tis" TileDir = EVAL "%MOD_FOLDER%/tilesets" TileRegExp = "^AR0115.TIS$" RET Count END // Create a new tileset from a PVRz-based TIS (but skip the first row of blank tiles)
 
 END
+  
+  
   
   
