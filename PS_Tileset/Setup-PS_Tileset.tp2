@@ -47,11 +47,7 @@ COPY ~%MOD_FOLDER%/tilesets~ ~%MOD_FOLDER%/processed~
 
 COPY ~%MOD_FOLDER%/processed/AR0301.TIS~ ~%MOD_FOLDER%/processed/AR0301.TIS~
   LPF ps_tileset_add_tiles INT_VAR MaxCount = 23 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^AR0301_00[0-2][0-9].bmp$" Method = "Push" RET Count END // Add a row of black tiles to the end of the tileset
-  //LPF ps_tileset_remove_tiles INT_VAR Count = 7 STR_VAR Method = "Pop" END
   LPF ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 23 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^AR0301_00[0-2][0-9].bmp$" Method = "InsertAt" RET Count END // Add a row of black tiles to the beginning of the tileset
-  //LPF ps_tileset_remove_tiles INT_VAR Pos = 0 Count = 7 STR_VAR Method = "RemoveAt" END
-//COPY ~%MOD_FOLDER%/processed/AR0150.tis~ ~%MOD_FOLDER%/processed/AR0150.tis~
-  //LPF ps_tileset_add_tiles INT_VAR Pos = 0 STR_VAR TileDir = EVAL "%MOD_FOLDER%/tiles" TileRegExp = "^.+\.bmp$" Method = "Replace" RET Count END
 COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
   LPF ps_tileset_add_tiles INT_VAR Pos = 120 MaxCount = 2 PVRz_Page = "-1" PVRz_X = 0 PVRz_Y = 0 STR_VAR Method = "Replace" RET Count END // Blank out a tile in a PVRz-based tileset using a manually specified tile
   LPF ps_tileset_add_tiles INT_VAR Pos = 10000 STR_VAR TileDir = EVAL "%MOD_FOLDER%/processed" TileRegExp = "^AR0115.tis$" Method = "Replace" RET Count END // Duplicate the tiles in a PVRz-based tileset by loading tiles from a PVRz-based TIS
@@ -70,7 +66,21 @@ LAF ps_tileset_create_tileset INT_VAR LengthOfTilesSection = 5120 DimensionOfTil
 LAF ps_tileset_create_tileset INT_VAR LengthOfTilesSection = 12 DimensionOfTile = 64  MaxCount = 100000 Offset = 240 STR_VAR OutTileset = EVAL "%MOD_FOLDER%/processed/new_tileset2.tis" TileDir = EVAL "%MOD_FOLDER%/tilesets" TileRegExp = "^AR0115.TIS$" RET Count END // Create a new tileset from a PVRz-based TIS (but skip the first row of blank tiles)
 
 END
-  
-  
-  
-  
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Export Tileset~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Export Tileset~ BEGIN
+
+COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_tileset_export_tiles INT_VAR Pos = 0 STR_VAR OutTileDir = EVAL "%MOD_FOLDER%/processed" OutType = "bmp" RET Count END // Export all tiles as bitmaps
+  LPF ps_tileset_export_tiles INT_VAR Pos = 0 Count = 10 STR_VAR OutTileDir = EVAL "%MOD_FOLDER%/processed" OutType = "tis" RET Count END // export first 11 tiles as a tileset
+BUT_ONLY
+COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
+  LPF ps_tileset_export_tiles INT_VAR Pos = 0 STR_VAR OutTileDir = EVAL "%MOD_FOLDER%/processed" OutType = "raw" RET Count END // Export all tiles as a raw file
+BUT_ONLY
+ 
+END
+
