@@ -84,3 +84,18 @@ BUT_ONLY
  
 END
 
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Tileset Info~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Tileset Info~ BEGIN
+
+COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
+  LPF ps_tileset_info INT_VAR Verbose = 2 Log = 0 STR_VAR nl = EVAL ~%LNL%~ END // Log verbose output of PVRz-based tileset to console
+BUT_ONLY
+COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_tileset_info INT_VAR Verbose = 2 Log = 1 STR_VAR nl = EVAL ~%WNL%~ END // Log verbose output of palette-based tileset to log file
+BUT_ONLY
+ 
+END

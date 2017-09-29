@@ -477,3 +477,155 @@ DEFINE_PATCH_FUNCTION ps_tileset_export_tile_RAW INT_VAR fz = 0 STR_VAR fm = "" 
     BUT_ONLY
   END
 END
+
+//////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////    ps_tileset_info    //////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+// This is a WeiDU patch function that gathers and reports information from a tileset.
+//   Setting INT_VAR Verbose = 1 provides some basic information about the tileset while setting it to 2 provides copious
+//     amounts of information and could take a minute to run on large palette-based tilesets.
+//   If INT_VAR Log = 1 then the tileset info will be saved the the %MOD_FOLDER%/logs folder.  Otherwise the info is displayed
+//     on the console (and in the .debug file).
+//   STR_VAR nl can be set to the newline character(s) to use in the log file and console input, and defaults to %WNL% (Windows new line).
+//////////////////////////////////////////////////////////////////////////////////
+DEFINE_PATCH_FUNCTION ps_tileset_info INT_VAR Verbose = 1 Log = 1 STR_VAR nl = EVAL ~%WNL%~ BEGIN
+  //SPRINT nl ~%WNL%~ // Designate NewLine character for output file/console log
+  SET nll = STRING_LENGTH ~%nl%~ // Length of NewLine character(s)
+  SPRINT info ~~
+  LPF ps_concat_str STR_VAR var = ~%info%~ str = ~Retrieving info from "%SOURCE_FILESPEC%":%nl%FileSize = %SOURCE_SIZE% bytes%nl%~ RET info = var END
+  READ_ASCII 0x0 Signature (4) // Signature ("TIS ")
+  PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIZ0~ = 1) OR (~%Signature%~ STRING_EQUAL_CASE ~TBC ~ = 1) OR (~%Signature%~ STRING_EQUAL_CASE ~TISC~ = 1) BEGIN // Tileset is compressed
+    LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%Tileset "%SOURCE_FILESPEC%" is compressed but compressed tilesets are not supported:  no info can be retrieved.~ RET info = var END
+  END ELSE PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) BEGIN // Is an uncompressed tileset with a header
+    READ_ASCII 0x4 Version (4)          // Version ("V1  ")
+    READ_LONG 0x8 CountOfTiles          // Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+    READ_LONG 0xc LengthOfTilesSection  // Length of tiles section [(1024+DimensionOfTile*DimensionOfTile) OR (12)]
+    READ_LONG 0x10 SizeOfHeader         // Size of the header (24)
+    READ_LONG 0x14 DimensionOfTile      // Dimension of 1 tile in pixels (64x64)
+  END ELSE PATCH_IF (~%SOURCE_EXT%~ STRING_EQUAL_CASE ~tis~ = 1) BEGIN // Appears to be a tileset without a header.  A header can be generated but it requires making some assumptions.
+    LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%The file appears to be a tileset, but does not have a header.  A few assumptions will be made, then any additional information will be reported based on those assumptions.~ RET info = var END
+    SPRINT Signature ~TIS ~				// Signature ("TIS ")
+	SPRINT Version ~V1  ~             	// Version ("V1  ")
+    CountOfTiles = (SOURCE_SIZE / 5120) // Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+    LengthOfTilesSection = 5120         // Length of tiles section (1024+DimensionOfTile*DimensionOfTile) - assumption
+    SizeOfHeader = 0                  	// Size of the header (24) - assumption, but a very good one
+    DimensionOfTile = 64                // Dimension of 1 tile in pixels (64x64) - assumption, but a good one
+  END
+  PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) BEGIN // Has been identified as a valid tileset
+    px = (DimensionOfTile * DimensionOfTile) // Pixels per frame
+	tpx = (px * CountOfTiles) // Total pixels in the tileset
+	ct = ((SOURCE_SIZE - SizeOfHeader) / LengthOfTilesSection) // Calculated number of tiles
+	PATCH_IF (Verbose = 1) BEGIN // Display basic tileset and header info
+	  LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%Header:%nl%  Signature = "%Signature%"%nl%  Version = "%Version%"%nl%  CountOfTiles = %CountOfTiles%%nl%  LengthOfTilesSection = %LengthOfTilesSection%%nl%  SizeOfHeader = %SizeOfHeader%%nl%  DimensionOfTile = %DimensionOfTile%~ RET info = var END
+	END ELSE PATCH_IF (Verbose >= 2) BEGIN // Display basic tileset and header info plus additional info
+	  LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%Header:%nl%  Signature = "%Signature%"%nl%  Version = "%Version%"%nl%  CountOfTiles = %CountOfTiles%%nl%  LengthOfTilesSection = %LengthOfTilesSection%%nl%  SizeOfHeader = %SizeOfHeader%%nl%  DimensionOfTile = %DimensionOfTile%%nl%%nl%Extra Info:%nl%  Each tile has %px% pixels for a total of %tpx% pixels in the tileset.%nl%  The size of the tileset indicates it has %ct% tiles.~ RET info = var END
+	END
+	PATCH_IF (LengthOfTilesSection = 12) BEGIN // Is a PVRz-based tileset
+	  INNER_PATCH ~%SOURCE_RES%~ BEGIN // Get pvrz resource reference
+	    DELETE_BYTES 1 1
+		READ_ASCII 0 pvrz (BUFFER_LENGTH)
+	  END
+	  PATCH_IF (Verbose >= 1) BEGIN // Display info about tileset type
+        LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%  "%SOURCE_FILESPEC%" is a PVRz-based tileset referencing %pvrz%**.pvrz files.~ RET info = var END
+	  END
+	  PATCH_IF (Verbose >= 2) BEGIN // Display verbose info about each PVRz-based tile
+	    FOR (t1 = 0; t1 < CountOfTiles; ++t1) BEGIN // Tile loop
+		  READ_LONG (SizeOfHeader + LengthOfTilesSection * t1) PVRz_Page // PVRZ page
+		  READ_LONG (SizeOfHeader + LengthOfTilesSection * t1 + 4) PVRz_X // PVRZ texture coordinate X
+		  READ_LONG (SizeOfHeader + LengthOfTilesSection * t1 + 8) PVRz_Y // PVRZ texture coordinate Y
+		  PATCH_IF (PVRz_Page = "-1") BEGIN // Special: A value of -1/0xFFFFFFFF indicates to fill the whole tile with black pixels
+		    SPRINT pvref ~blank~
+		  END ELSE BEGIN
+		    SPRINT pg ~00%PVRz_Page%~ // PVRZ page value as a zero-padded two digits number
+	        INNER_PATCH_SAVE pg ~%pg%~ BEGIN // Format the tile number currently being exported to be exactly 2 digits (padded with 0s)
+	          DELETE_BYTES 0 (BUFFER_LENGTH - 2)
+	        END
+		    SPRINT pvref ~%pvrz%%pg%.pvrz~ // Explicit PVRZ file reference
+		  END
+		  LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%%nl%Tile %t1%:%nl%  PVRz_Page = %PVRz_Page% (%pvref%)%nl%  PVRz_X = %PVRz_X%%nl%  PVRz_Y = %PVRz_Y%~ RET info = var END
+		END
+      END
+	END ELSE BEGIN
+	  PATCH_IF (Verbose >= 1) BEGIN // Display info about tileset type
+		LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%  "%SOURCE_FILESPEC%" is a palette-based tileset.~ RET info = var END
+      END
+	  PATCH_IF (Verbose >= 2) BEGIN // Display verbose info about each palette-based tile
+	  DEFINE_ARRAY array BEGIN "  0" "  1" "  2" "  3" "  4" "  5" "  6" "  7" "  8" "  9" " 10" " 11" " 12" " 13" " 14" " 15" " 16" " 17" " 18" " 19" " 20" " 21" " 22" " 23" " 24" " 25" " 26" " 27" " 28" " 29" " 30" " 31" " 32" " 33" " 34" " 35" " 36" " 37" " 38" " 39" " 40" " 41" " 42" " 43" " 44" " 45" " 46" " 47" " 48" " 49" " 50" " 51" " 52" " 53" " 54" " 55" " 56" " 57" " 58" " 59" " 60" " 61" " 62" " 63" " 64" " 65" " 66" " 67" " 68" " 69" " 70" " 71" " 72" " 73" " 74" " 75" " 76" " 77" " 78" " 79" " 80" " 81" " 82" " 83" " 84" " 85" " 86" " 87" " 88" " 89" " 90" " 91" " 92" " 93" " 94" " 95" " 96" " 97" " 98" " 99" "100" "101" "102" "103" "104" "105" "106" "107" "108" "109" "110" "111" "112" "113" "114" "115" "116" "117" "118" "119" "120" "121" "122" "123" "124" "125" "126" "127" "128" "129" "130" "131" "132" "133" "134" "135" "136" "137" "138" "139" "140" "141" "142" "143" "144" "145" "146" "147" "148" "149" "150" "151" "152" "153" "154" "155" "156" "157" "158" "159" "160" "161" "162" "163" "164" "165" "166" "167" "168" "169" "170" "171" "172" "173" "174" "175" "176" "177" "178" "179" "180" "181" "182" "183" "184" "185" "186" "187" "188" "189" "190" "191" "192" "193" "194" "195" "196" "197" "198" "199" "200" "201" "202" "203" "204" "205" "206" "207" "208" "209" "210" "211" "212" "213" "214" "215" "216" "217" "218" "219" "220" "221" "222" "223" "224" "225" "226" "227" "228" "229" "230" "231" "232" "233" "234" "235" "236" "237" "238" "239" "240" "241" "242" "243" "244" "245" "246" "247" "248" "249" "250" "251" "252" "253" "254" "255" END
+	    FOR (t1 = 0; t1 < CountOfTiles; ++t1) BEGIN // Tile loop
+		  FOR (b0 = 0; b0 < LengthOfTilesSection; ++b0) BEGIN // Tile byte count loop
+		    READ_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + b0) da
+			SPRINT EVAL ~ps%b0%~ $array("%da%") // Store formatted byte value
+		  END
+		  INNER_PATCH_SAVE info ~%info%~ BEGIN
+		    sz = BUFFER_LENGTH
+			SPRINT line ~%nl%%nl%Tile %t1%:%nl%  Palette:~
+			linesz = STRING_LENGTH ~%line%~
+			INSERT_BYTES sz (linesz + (43 + nll) * 256)
+			WRITE_ASCIIE sz ~%line%~
+			sz += linesz
+			FOR (t2 = 0; t2 < 256; ++t2) BEGIN // Palette entry loop
+			  SPRINT pe $array("%t2%")
+			  idx = (t2 * 4)
+			  SPRINT bb EVAL "%ps%idx%%"
+			  idx += 1
+			  SPRINT gg EVAL "%ps%idx%%"
+			  idx += 1
+			  SPRINT rr EVAL "%ps%idx%%"
+			  idx += 1
+			  SPRINT aa EVAL "%ps%idx%%"
+			  WRITE_ASCIIE sz ~%nl%    PaletteEntry %pe%: rgba(%rr%,%gg%,%bb%,%aa%)~
+			  sz += (43 + nll)
+			END
+			ofs = (DimensionOfTile * 4 + 4 + nll)
+			INSERT_BYTES sz (12 + nll * 2 + ofs * DimensionOfTile)
+			WRITE_ASCIIE sz ~%nl%  Tile Data:%nl%~
+			sz += (12 + nll * 2)
+			FOR (t3 = 0; t3 < DimensionOfTile; ++t3) BEGIN // Tile height loop
+			  WRITE_ASCIIE (sz + ofs * t3) ~    ~ // 4 Chars
+		      FOR (t4 = 0; t4 < DimensionOfTile; ++t4) BEGIN // Tile width loop
+			    idx = (1024 + DimensionOfTile * t3 + t4)
+				SPRINT format EVAL "%ps%idx%%"
+                WRITE_ASCIIE (sz + ofs * t3 + t4 * 4 + 4) ~%format% ~ // 4 Chars
+			  END
+			  WRITE_ASCIIE (sz + ofs * t3 + t4 * 4 + 4) ~%nl%~ // 1 or 2 Chars
+		    END
+		  END
+		END
+      END
+	END
+  END ELSE BEGIN
+	LPF ps_concat_str STR_VAR var = ~%info%~ str = ~%nl%"%SOURCE_FILESPEC%" does not appear to be a valid tileset:  it will not be processed.~ RET info = var END
+  END
+  PATCH_IF (Log = 1) BEGIN // Save info as a file
+    fz = STRING_LENGTH ~%info%%nl%~
+	PATCH_PRINT ~Saving Tileset Info for "%SOURCE_FILESPEC%" to "%MOD_FOLDER%/logs/%SOURCE_RES%.txt".~
+    LPF ps_tileset_export_tile_RAW INT_VAR fz STR_VAR fm = EVAL "%info%%nl%" OutTilePath = EVAL "%MOD_FOLDER%/logs/%SOURCE_RES%.txt" END
+  END ELSE BEGIN // Print info to console
+    PATCH_PRINT ~%info%%nl%~
+  END
+END
+
+//////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////    ps_concat_str    ///////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+// This pair of WeiDU functions (equivalent action and patch varieties) concatenates two strings. 
+//   STR_VAR str is appended to the end of STR_VAR var and the new var is returned.
+//   These functions have been tested to achieve the desired result as quickly as possible,
+//     at the cost of a slightly longer code length than is absolutely necessary.
+//////////////////////////////////////////////////////////////////////////////////
+DEFINE_ACTION_FUNCTION ps_concat_str STR_VAR var = "" str = "" RET var BEGIN
+  OUTER_INNER_PATCH_SAVE var ~%var%~ BEGIN
+    sz = BUFFER_LENGTH
+	strsz = STRING_LENGTH ~%str%~
+	INSERT_BYTES sz strsz
+	WRITE_ASCIIE sz ~%str%~
+  END
+END
+DEFINE_PATCH_FUNCTION ps_concat_str STR_VAR var = "" str = "" RET var BEGIN
+  INNER_PATCH_SAVE var ~%var%~ BEGIN
+    sz = BUFFER_LENGTH
+	strsz = STRING_LENGTH ~%str%~
+	INSERT_BYTES sz strsz
+	WRITE_ASCIIE sz ~%str%~
+  END
+END
