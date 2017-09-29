@@ -1,6 +1,6 @@
 BACKUP ~PS_Tileset\backup~
 AUTHOR ~Sam.~
-VERSION ~v0.0.0~
+VERSION ~v0.0.1~
 
 ALWAYS
   INCLUDE ~%MOD_FOLDER%/lib/ps_tileset_lib.tpa~ // Include the PS_Tileset function library
