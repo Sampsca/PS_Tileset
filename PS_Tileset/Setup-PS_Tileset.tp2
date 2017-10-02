@@ -1,6 +1,6 @@
 BACKUP ~PS_Tileset\backup~
 AUTHOR ~Sam.~
-VERSION ~v0.0.1~
+VERSION ~v0.0.2~
 
 ALWAYS
   INCLUDE ~%MOD_FOLDER%/lib/ps_tileset_lib.tpa~ // Include the PS_Tileset function library
@@ -98,4 +98,24 @@ COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
   LPF ps_tileset_info INT_VAR Verbose = 2 Log = 1 STR_VAR nl = EVAL ~%WNL%~ END // Log verbose output of palette-based tileset to log file
 BUT_ONLY
  
+END
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Tileset Replace Palette Entry~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Tileset Replace Palette Entry~ BEGIN
+
+COPY ~%MOD_FOLDER%/tilesets/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_tileset_replace_palette_entry INT_VAR Pos = 24 Count = 1 Oldcolor = 0x00363634 NewColor = 0x00000000 RET Count END // Make some brown background pixels black
+  LPF ps_tileset_replace_palette_entry INT_VAR Pos = 75 Count = 1 Oldcolor = 0x00010000 NewColor = 0x00000000 RET Count END // Make some nearly black background pixels black
+  LPF ps_tileset_replace_palette_entry INT_VAR Pos = 89 Count = 1 Oldcolor = 0x00010101 NewColor = 0x00000000 RET Count END // Make some more nearly black background pixels black
+  LPF ps_tileset_replace_palette_entry INT_VAR Pos = 0 Count = 10000 Oldcolor = 0x00000000 NewColor = 0x000000FF RET Count END // Replace all black pixels with blue
+BUT_ONLY
+
+COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
+  LPF ps_tileset_replace_palette_entry INT_VAR Pos = 0 Count = 10000 Oldcolor = 0x00000000 NewColor = 0x000000FF RET Count END // Try to replace palette entries on a PVRz-based tileset
+BUT_ONLY
+
 END

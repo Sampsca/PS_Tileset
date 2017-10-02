@@ -1,6 +1,6 @@
 //////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////      ps_tileset_lib      ////////////////////////////
-////////////////////////////          v0.0.1          ////////////////////////////
+////////////////////////////          v0.0.2          ////////////////////////////
 //////////////////////////// Copyright (c) 2017 Sam.  ////////////////////////////
 ////////////////////////////          WTFPL           ////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
@@ -601,6 +601,56 @@ DEFINE_PATCH_FUNCTION ps_tileset_info INT_VAR Verbose = 1 Log = 1 STR_VAR nl = E
     LPF ps_tileset_export_tile_RAW INT_VAR fz STR_VAR fm = EVAL "%info%%nl%" OutTilePath = EVAL "%MOD_FOLDER%/logs/%SOURCE_RES%.txt" END
   END ELSE BEGIN // Print info to console
     PATCH_PRINT ~%info%%nl%~
+  END
+END
+
+//////////////////////////////////////////////////////////////////////////////////
+/////////////////////    ps_tileset_replace_palette_entry    /////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+// This is a WeiDU patch function that replaces palette entries with a new color.
+//   Palette entries matching INT_VAR Oldcolor will be replaced with INT_VAR NewColor in up to INT_VAR Count tiles starting at tile INT_VAR Pos.
+//   Oldcolor and NewColor can most easily be expressed by a hex integer in the form 0xAARRGGBB where AA is the alpha channel,
+//     RR is the red channel, GG is the green channel, and BB is the blue channel.
+//   Note that by replacing the palette entry, every pixel in the tile using this entry will also be recolored.
+//   This function returns the INT_VAR Count of palette entries that were replaced.
+//////////////////////////////////////////////////////////////////////////////////
+DEFINE_PATCH_FUNCTION ps_tileset_replace_palette_entry INT_VAR Pos = 0 Count = 1 Oldcolor = 0x0000FF00 NewColor = 0x0 RET Count BEGIN
+  READ_ASCII 0x0 Signature (4)          // Signature ("TIS ")
+  READ_ASCII 0x4 Version (4)            // Version ("V1  ")
+  PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) AND (~%Version%~ STRING_EQUAL_CASE ~V1  ~ = 1) BEGIN // Is a valid tileset of appropriate version
+    READ_LONG 0x8 CountOfTiles          // Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+    READ_LONG 0xc LengthOfTilesSection  // Length of tiles section [(1024+DimensionOfTile*DimensionOfTile) OR (12)]
+    READ_LONG 0x10 SizeOfHeader         // Size of the header (24)
+    READ_LONG 0x14 DimensionOfTile      // Dimension of 1 tile in pixels (64x64)
+    PATCH_IF (LengthOfTilesSection > 12) BEGIN // Palette entries can only be replaced in palette-based tilesets
+	  PATCH_IF (Count < 0) BEGIN
+        Count = 0 // Ensure Count !< 0
+      END
+      PATCH_IF (Pos < 0) OR (Pos > CountOfTiles) BEGIN // Ensure Pos is a valid value
+        PATCH_PRINT ~Invalid parameters passed to the function ps_tileset_replace_palette_entry:  Pos was %Pos% but must be between 0 and %CountOfTiles% (inclusive).  No palette entries will be replaced.~
+        Pos = 0
+        Count = 0
+      END ELSE PATCH_IF (Pos + Count > CountOfTiles) BEGIN // If you try to modify more tiles than there are in the tileset after Pos
+        Count = (CountOfTiles - Pos) // Adjust the Count of tiles to the number of tiles in the tileset after Pos
+      END
+	  chg = 0
+      FOR (t1 = Pos; t1 < Pos + Count; ++t1) BEGIN // Tile loop
+        FOR (p1 = 0; p1 < 256; ++p1) BEGIN // Palette loop
+	      os = (SizeOfHeader + LengthOfTilesSection * t1 + p1 * 4)
+	      READ_LONG os PaletteEntry
+		  PATCH_IF (PaletteEntry = Oldcolor) BEGIN
+		    WRITE_LONG os NewColor
+		    chg += 1
+		  END
+	    END
+	  END
+	  Count = chg
+	END ELSE BEGIN
+	  PATCH_PRINT ~"%SOURCE_FILESPEC%" is a PVRz-based tileset but palette entries can only be replaced in palette-based tilesets.~
+	  Count = 0
+	END
+  END ELSE BEGIN
+    PATCH_PRINT ~"%SOURCE_FILESPEC%" does not appear to be a valid tileset:  it will not be processed.~
   END
 END
 
