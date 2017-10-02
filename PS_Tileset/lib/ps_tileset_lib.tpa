@@ -1,6 +1,6 @@
 //////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////      ps_tileset_lib      ////////////////////////////
-////////////////////////////          v0.0.2          ////////////////////////////
+////////////////////////////          v0.0.3          ////////////////////////////
 //////////////////////////// Copyright (c) 2017 Sam.  ////////////////////////////
 ////////////////////////////          WTFPL           ////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
@@ -511,7 +511,7 @@ DEFINE_PATCH_FUNCTION ps_tileset_info INT_VAR Verbose = 1 Log = 1 STR_VAR nl = E
     DimensionOfTile = 64                // Dimension of 1 tile in pixels (64x64) - assumption, but a good one
   END
   PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) BEGIN // Has been identified as a valid tileset
-    px = (DimensionOfTile * DimensionOfTile) // Pixels per frame
+    px = (DimensionOfTile * DimensionOfTile) // Pixels per tile
 	tpx = (px * CountOfTiles) // Total pixels in the tileset
 	ct = ((SOURCE_SIZE - SizeOfHeader) / LengthOfTilesSection) // Calculated number of tiles
 	PATCH_IF (Verbose = 1) BEGIN // Display basic tileset and header info
@@ -654,27 +654,51 @@ DEFINE_PATCH_FUNCTION ps_tileset_replace_palette_entry INT_VAR Pos = 0 Count = 1
   END
 END
 
+/*
 //////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////    ps_concat_str    ///////////////////////////////
+/////////////////////////    ps_tileset_recolor_pixel    /////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
-// This pair of WeiDU functions (equivalent action and patch varieties) concatenates two strings. 
-//   STR_VAR str is appended to the end of STR_VAR var and the new var is returned.
-//   These functions have been tested to achieve the desired result as quickly as possible,
-//     at the cost of a slightly longer code length than is absolutely necessary.
+// This is a WeiDU patch function that 
 //////////////////////////////////////////////////////////////////////////////////
-DEFINE_ACTION_FUNCTION ps_concat_str STR_VAR var = "" str = "" RET var BEGIN
-  OUTER_INNER_PATCH_SAVE var ~%var%~ BEGIN
-    sz = BUFFER_LENGTH
-	strsz = STRING_LENGTH ~%str%~
-	INSERT_BYTES sz strsz
-	WRITE_ASCIIE sz ~%str%~
+DEFINE_PATCH_FUNCTION ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 Oldcolor = 0x0000FF00 NewColor = 0x0 Pixel = 0 RET Count BEGIN
+  READ_ASCII 0x0 Signature (4)          // Signature ("TIS ")
+  READ_ASCII 0x4 Version (4)            // Version ("V1  ")
+  PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) AND (~%Version%~ STRING_EQUAL_CASE ~V1  ~ = 1) BEGIN // Is a valid tileset of appropriate version
+    READ_LONG 0x8 CountOfTiles          // Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+    READ_LONG 0xc LengthOfTilesSection  // Length of tiles section [(1024+DimensionOfTile*DimensionOfTile) OR (12)]
+    READ_LONG 0x10 SizeOfHeader         // Size of the header (24)
+    READ_LONG 0x14 DimensionOfTile      // Dimension of 1 tile in pixels (64x64)
+    PATCH_IF (LengthOfTilesSection > 12) BEGIN // Palette entries can only be replaced in palette-based tilesets
+	  PATCH_IF (Count < 0) BEGIN
+        Count = 0 // Ensure Count !< 0
+      END
+      PATCH_IF (Pos < 0) OR (Pos > CountOfTiles) BEGIN // Ensure Pos is a valid value
+        PATCH_PRINT ~Invalid parameters passed to the function ps_tileset_replace_palette_entry:  Pos was %Pos% but must be between 0 and %CountOfTiles% (inclusive).  No palette entries will be replaced.~
+        Pos = 0
+        Count = 0
+      END ELSE PATCH_IF (Pos + Count > CountOfTiles) BEGIN // If you try to modify more tiles than there are in the tileset after Pos
+        Count = (CountOfTiles - Pos) // Adjust the Count of tiles to the number of tiles in the tileset after Pos
+      END
+	  chg = 0
+	  px = (DimensionOfTile * DimensionOfTile) // Pixels per tile
+      FOR (t1 = Pos; t1 < Pos + Count; ++t1) BEGIN // Tile loop
+        FOR (p1 = 0; p1 < px; ++p1) BEGIN // Pixel loop
+	      os = (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + p1)
+	      READ_BYTE os Pxl
+		  
+		  PATCH_IF (PaletteEntry = Oldcolor) BEGIN
+		    WRITE_LONG os NewColor
+		    chg += 1
+		  END
+	    END
+	  END
+	  Count = chg
+	END ELSE BEGIN
+	  PATCH_PRINT ~"%SOURCE_FILESPEC%" is a PVRz-based tileset but palette entries can only be replaced in palette-based tilesets.~
+	  Count = 0
+	END
+  END ELSE BEGIN
+    PATCH_PRINT ~"%SOURCE_FILESPEC%" does not appear to be a valid tileset:  it will not be processed.~
   END
 END
-DEFINE_PATCH_FUNCTION ps_concat_str STR_VAR var = "" str = "" RET var BEGIN
-  INNER_PATCH_SAVE var ~%var%~ BEGIN
-    sz = BUFFER_LENGTH
-	strsz = STRING_LENGTH ~%str%~
-	INSERT_BYTES sz strsz
-	WRITE_ASCIIE sz ~%str%~
-  END
-END
+*/

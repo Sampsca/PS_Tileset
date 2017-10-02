@@ -1,9 +1,10 @@
 BACKUP ~PS_Tileset\backup~
 AUTHOR ~Sam.~
-VERSION ~v0.0.2~
+VERSION ~v0.0.3~
 
 ALWAYS
   INCLUDE ~%MOD_FOLDER%/lib/ps_tileset_lib.tpa~ // Include the PS_Tileset function library
+  INCLUDE ~%MOD_FOLDER%/lib/ps_misc_func.tpa~ // Include the PS_Miscellaneous function library
 END
 
 //! Test PS_Tileset /////////////////////////////////////////////////////
@@ -117,5 +118,35 @@ BUT_ONLY
 COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
   LPF ps_tileset_replace_palette_entry INT_VAR Pos = 0 Count = 10000 Oldcolor = 0x00000000 NewColor = 0x000000FF RET Count END // Try to replace palette entries on a PVRz-based tileset
 BUT_ONLY
+
+END
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Tileset Z-lib Compress~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Tileset Z-lib Compress~ BEGIN
+
+COPY ~%MOD_FOLDER%/tilesets/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_zlib_compress END // Z-lib compress the tileset
+COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_zlib_compress END // Try to Z-lib compress the tileset again
+
+END
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Tileset Z-lib Decompress~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Tileset Z-lib Decompress~ BEGIN
+
+COPY ~%MOD_FOLDER%/tilesets/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_zlib_compress END // Z-lib compress the tileset
+COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_zlib_decompress END // Z-lib decompress the tileset
+COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_zlib_decompress END // Try to Z-lib decompress the tileset again
 
 END
