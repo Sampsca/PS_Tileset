@@ -1,6 +1,6 @@
 BACKUP ~PS_Tileset\backup~
 AUTHOR ~Sam.~
-VERSION ~v0.0.3~
+VERSION ~v0.0.4~
 
 ALWAYS
   INCLUDE ~%MOD_FOLDER%/lib/ps_tileset_lib.tpa~ // Include the PS_Tileset function library
@@ -95,7 +95,7 @@ ACTION_TIME ~Tileset Info~ BEGIN
 COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
   LPF ps_tileset_info INT_VAR Verbose = 2 Log = 0 STR_VAR nl = EVAL ~%LNL%~ END // Log verbose output of PVRz-based tileset to console
 BUT_ONLY
-COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+COPY ~%MOD_FOLDER%/tilesets/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
   LPF ps_tileset_info INT_VAR Verbose = 2 Log = 1 STR_VAR nl = EVAL ~%WNL%~ END // Log verbose output of palette-based tileset to log file
 BUT_ONLY
  
@@ -148,5 +148,38 @@ COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
   LPF ps_zlib_decompress END // Z-lib decompress the tileset
 COPY ~%MOD_FOLDER%/processed/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
   LPF ps_zlib_decompress END // Try to Z-lib decompress the tileset again
+
+END
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Tileset Recolor Pixel~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Tileset Recolor Pixel~ BEGIN
+
+COPY ~%MOD_FOLDER%/tilesets/AR0150.tis~ ~%MOD_FOLDER%/processed/AR0150.tis~
+  LPF ps_tileset_repair_header END
+  LPF ps_tileset_recolor_pixel INT_VAR Pos = 13 Count = 1 NewColor = 0x0004020C Pixel = 826 RET Count END // The color of the pixel is already the color we want it to be
+  LPF ps_tileset_recolor_pixel INT_VAR Pos = 13 Count = 1 NewColor = 0x00644A04 Pixel = 2 RET Count END // The color we need already exists in the palette
+  
+  FOR (z1 = 0; z1 < 250; ++z1) BEGIN // Create several scenarios to test the function 
+	WRITE_BYTE (1048 + 1 + z1) z1
+  END
+  LPF ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 NewColor = 0x00FF0000 Pixel = 0 RET Count END
+  INNER_ACTION BEGIN
+      RANDOM_SEED ~oak~
+	END
+  FOR (z1 = 0; z1 < 300; ++z1) BEGIN // Write enough random pixels to the tile to test unused palette entgries, duplicate palette entries, and to calculate "nearest neighbor" colors
+    tmpc = RANDOM (0 10000000)
+	tmpp = RANDOM (2 4000)
+    LPF ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 NewColor = tmpc Pixel = tmpp RET Count END
+  END
+  
+BUT_ONLY
+
+COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
+  LPF ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 10000 NewColor = 0x000000FF Pixel = 100 RET Count END // Try to recolor a pixel in a PVRz-based tileset
+BUT_ONLY
 
 END

@@ -1,6 +1,6 @@
 //////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////      ps_tileset_lib      ////////////////////////////
-////////////////////////////          v0.0.3          ////////////////////////////
+////////////////////////////          v0.0.4          ////////////////////////////
 //////////////////////////// Copyright (c) 2017 Sam.  ////////////////////////////
 ////////////////////////////          WTFPL           ////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
@@ -654,13 +654,18 @@ DEFINE_PATCH_FUNCTION ps_tileset_replace_palette_entry INT_VAR Pos = 0 Count = 1
   END
 END
 
-/*
 //////////////////////////////////////////////////////////////////////////////////
 /////////////////////////    ps_tileset_recolor_pixel    /////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
-// This is a WeiDU patch function that 
+// This is a WeiDU patch function that recolors a pixel in a tile without changing the color of every pixel using the same palette entry.
+//   INT_VAR Pos indicates the first tile in which the specified pixel will be recolored.  INT_VAR Count can be used to specify the count of
+//     tiles in which to recolor the specified pixel, but it usually only makes since to do so for 1 tile.
+//   INT_VAR NewColor specifies the desired color for the indicated pixel and can most easily be expressed by a hex integer in the form 0xAARRGGBB
+//     where AA is the alpha channel, RR is the red channel, GG is the green channel, and BB is the blue channel.
+//   INT_VAR Pixel specifies which pixel to recolor.  In each tile, pixels are numbered left to right, top to bottom starting at 0.
+//   This function returns the INT_VAR Count of pixels that were recolored.
 //////////////////////////////////////////////////////////////////////////////////
-DEFINE_PATCH_FUNCTION ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 Oldcolor = 0x0000FF00 NewColor = 0x0 Pixel = 0 RET Count BEGIN
+DEFINE_PATCH_FUNCTION ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 NewColor = 0x0 Pixel = 0 RET Count BEGIN
   READ_ASCII 0x0 Signature (4)          // Signature ("TIS ")
   READ_ASCII 0x4 Version (4)            // Version ("V1  ")
   PATCH_IF (~%Signature%~ STRING_EQUAL_CASE ~TIS ~ = 1) AND (~%Version%~ STRING_EQUAL_CASE ~V1  ~ = 1) BEGIN // Is a valid tileset of appropriate version
@@ -673,32 +678,105 @@ DEFINE_PATCH_FUNCTION ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 Oldcolo
         Count = 0 // Ensure Count !< 0
       END
       PATCH_IF (Pos < 0) OR (Pos > CountOfTiles) BEGIN // Ensure Pos is a valid value
-        PATCH_PRINT ~Invalid parameters passed to the function ps_tileset_replace_palette_entry:  Pos was %Pos% but must be between 0 and %CountOfTiles% (inclusive).  No palette entries will be replaced.~
+        PATCH_PRINT ~Invalid parameters passed to the function ps_tileset_recolor_pixel:  Pos was %Pos% but must be between 0 and %CountOfTiles% (inclusive).  No palette entries will be replaced.~
         Pos = 0
         Count = 0
       END ELSE PATCH_IF (Pos + Count > CountOfTiles) BEGIN // If you try to modify more tiles than there are in the tileset after Pos
         Count = (CountOfTiles - Pos) // Adjust the Count of tiles to the number of tiles in the tileset after Pos
       END
-	  chg = 0
-	  px = (DimensionOfTile * DimensionOfTile) // Pixels per tile
       FOR (t1 = Pos; t1 < Pos + Count; ++t1) BEGIN // Tile loop
-        FOR (p1 = 0; p1 < px; ++p1) BEGIN // Pixel loop
-	      os = (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + p1)
-	      READ_BYTE os Pxl
-		  
-		  PATCH_IF (PaletteEntry = Oldcolor) BEGIN
-		    WRITE_LONG os NewColor
-		    chg += 1
+	    Success = 0
+        READ_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + Pixel) PxVal // Get pixel value
+		READ_LONG (SizeOfHeader + LengthOfTilesSection * t1 + PxVal * 4) PxColor // Get pixel color
+		PATCH_IF (PxColor = NewColor) BEGIN // The color of the pixel is already the color we want it to be
+		  Success = 1
+		  PATCH_PRINT ~The color of the pixel is already the color we want it to be.~
+		END ELSE BEGIN // The color of the pixel is not the color we want it to be
+		  FOR (p1 = 0; p1 < 256; ++p1) BEGIN // Palette loop
+	        READ_LONG (SizeOfHeader + LengthOfTilesSection * t1 + p1 * 4) PaletteEntry
+		    SPRINT EVAL ~ps%p1%~ ~%PaletteEntry%~ // Store palette entry in LUT
+			SPRINT EVAL ~used%p1%~ ~0~ // Initialize is-palette-entry-used LUT as 'not used'
+			PATCH_IF (PaletteEntry = NewColor) BEGIN // The color we need already exists in the palette!
+			  WRITE_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + Pixel) p1 // Write pixel value
+			  Success = 1
+			  PATCH_PRINT ~The color we need already exists in the palette at PaletteEntry %p1%.  The color is %PaletteEntry%.~
+			  p1 += 10000 // Break out of Palette loop
+			END
+	      END
+		  PATCH_IF (Success != 1) BEGIN // The color of the pixel is not the color we want it to be and the new color we wanted to use was not already in the palette
+		    px = (DimensionOfTile * DimensionOfTile) // Pixels per tile
+		    FOR (p2 = 0; p2 < px; ++p2) BEGIN // Pixel loop
+	          READ_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + p2) Pxl
+			  PATCH_IF (p2 != Pixel) BEGIN  // Don't consider the pixel we are replacing when determining whether a palette entry is used
+		        SPRINT EVAL ~used%Pxl%~ ~1~ // Set values in is-palette-entry-used LUT
+			  END
+	        END
+		    FOR (p1 = 0; p1 < 256; ++p1) BEGIN // Palette loop
+		      SPRINT IsUsed EVAL "%used%p1%%"
+			  PATCH_IF (IsUsed = 0) BEGIN // We found an unused palette entry!
+			    WRITE_LONG (SizeOfHeader + LengthOfTilesSection * t1 + p1 * 4) NewColor // Write new color into the unused palette entry
+			    WRITE_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + Pixel) p1 // Write pixel value
+			    Success = 1
+				PATCH_PRINT ~An unused palette entry was found at PaletteEntry %p1%.~
+			    p1 += 10000 // Break out of Palette loop
+			  END
+		    END
 		  END
-	    END
+		  PATCH_IF (Success != 1) BEGIN // The color of the pixel is not already the color we want it to be and the new color we wanted to use was not already in the palette and there were no unused palette entries
+		    FOR (p1 = 0; p1 < 256; ++p1) BEGIN // Outer Palette loop
+		      SPRINT PEone EVAL "%ps%p1%%"
+			  FOR (p2 = 0; p2 < 256; ++p2) BEGIN // Inner Palette loop
+			    SPRINT PEtwo EVAL "%ps%p2%%"
+				PATCH_IF (PEone = PEtwo) AND (p1 != p2) BEGIN // We found a real duplicate and not itself
+				  FOR (p3 = 0; p3 < px; ++p3) BEGIN // Pixel loop
+				    os = (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + p3)
+				    READ_BYTE os Pxl
+				    PATCH_IF (Pxl = p2) BEGIN  // Change every pixel that was pointing to p2's palette entry to p1's palette entry
+				      WRITE_BYTE os p1
+				    END
+				  END
+				  WRITE_LONG (SizeOfHeader + LengthOfTilesSection * t1 + p2 * 4) NewColor // Write the new color the the now unused palette entry
+				  WRITE_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + Pixel) p2 // Set the pixel we are changing to point to the palette entry we just wrote our desired color to
+				  Success = 1
+				  PATCH_PRINT ~A duplicate palette entry was found at PaletteEntry %p2% and has been remapped to PaletteEntry %p1%.~
+				  p2 += 10000 // Break out of Inner Palette loop
+				  p1 += 10000 // Break out of Outer Palette loop
+				END
+			  END
+		    END
+		  END
+		  PATCH_IF (Success != 1) BEGIN // The color of the pixel is not already the color we want it to be and the new color we wanted to use was not already in the palette and there were no unused palette entries and there were no duplicate palette entries
+		    aa1 = ((NewColor >> 24) & 0xff) // high-order (leftmost) byte: bits 24-31
+		    rr1 = ((NewColor >> 16) & 0xff) // next byte, counting from left: bits 16-23
+		    gg1 = ((NewColor >>  8) & 0xff) // next byte, bits 8-15
+		    bb1 = (NewColor         & 0xff) // low-order byte: bits 0-7
+			NNdist = 1000000
+			NNval = 0
+			FOR (p1 = 0; p1 < 256; ++p1) BEGIN // Palette loop
+		      SPRINT PEone EVAL "%ps%p1%%"
+			  aa2 = ((PEone >> 24) & 0xff) // high-order (leftmost) byte: bits 24-31
+			  rr2 = ((PEone >> 16) & 0xff) // next byte, counting from left: bits 16-23
+			  gg2 = ((PEone >>  8) & 0xff) // next byte, bits 8-15
+			  bb2 = (PEone         & 0xff) // low-order byte: bits 0-7
+			  dist = ((aa2 - aa1) * (aa2 - aa1) + (rr2 - rr1) * (rr2 - rr1) + (gg2 - gg1) * (gg2 - gg1) + (bb2 - bb1) * (bb2 - bb1))
+			  PATCH_IF (dist < NNdist) BEGIN
+			    NNdist = dist
+				NNval = p1
+			  END
+			END
+			WRITE_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + Pixel) NNval // Set the pixel to the palette entry closest to our desired color
+			Success = 1
+			root = dist ** (1 2)
+			PATCH_PRINT ~The closest color to %NewColor% was at PaletteEntry %NNval% at a Euclidean distance of %root%.~
+		  END
+		END
 	  END
-	  Count = chg
 	END ELSE BEGIN
 	  PATCH_PRINT ~"%SOURCE_FILESPEC%" is a PVRz-based tileset but palette entries can only be replaced in palette-based tilesets.~
 	  Count = 0
 	END
   END ELSE BEGIN
     PATCH_PRINT ~"%SOURCE_FILESPEC%" does not appear to be a valid tileset:  it will not be processed.~
+	  Count = 0
   END
 END
-*/
