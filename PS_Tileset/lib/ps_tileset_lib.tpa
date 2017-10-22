@@ -735,7 +735,7 @@ DEFINE_PATCH_FUNCTION ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 NewColo
 				      WRITE_BYTE os p1
 				    END
 				  END
-				  WRITE_LONG (SizeOfHeader + LengthOfTilesSection * t1 + p2 * 4) NewColor // Write the new color the the now unused palette entry
+				  WRITE_LONG (SizeOfHeader + LengthOfTilesSection * t1 + p2 * 4) NewColor // Write the new color to the now unused palette entry
 				  WRITE_BYTE (SizeOfHeader + LengthOfTilesSection * t1 + 1024 + Pixel) p2 // Set the pixel we are changing to point to the palette entry we just wrote our desired color to
 				  Success = 1
 				  PATCH_PRINT ~A duplicate palette entry was found at PaletteEntry %p2% and has been remapped to PaletteEntry %p1%.~
