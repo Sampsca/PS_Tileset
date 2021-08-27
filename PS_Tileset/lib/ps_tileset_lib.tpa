@@ -119,10 +119,10 @@ DEFINE_PATCH_FUNCTION ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 100000 Off
       INNER_ACTION BEGIN
         OUTER_INNER_PATCH_SAVE NewTileData ~%NewTileData%~ BEGIN // Load internal buffer to store new tile data in
           FOR (j1 = MaxCount; j1 > 0; j1 -= 1) BEGIN
-            INSERT_BYTES NewTilesSize 12 // Make room for 1 new PVRz-based tile in the internal buffer
-            WRITE_LONG (NewTilesSize) PVRz_Page // PVRz page (Special: A value of -1/0xFFFFFFFF indicates to fill the whole tile with black pixels)
-            WRITE_LONG (NewTilesSize + 4) PVRz_X    // PVRz x coordinate
-            WRITE_LONG (NewTilesSize + 8) PVRz_Y    // PVRz y coordinate
+            INSERT_BYTES NewTilesSize 12         // Make room for 1 new PVRz-based tile in the internal buffer
+            WRITE_LONG (NewTilesSize) PVRz_Page  // PVRz page (Special: A value of -1/0xFFFFFFFF indicates to fill the whole tile with black pixels)
+            WRITE_LONG (NewTilesSize + 4) PVRz_X // PVRz x coordinate
+            WRITE_LONG (NewTilesSize + 8) PVRz_Y // PVRz y coordinate
             NewTilesSize += 12 // Update internal record of size (in bytes) of new tile data in the internal buffer
             Count += 1 // Increase the count of new tiles in the internal buffer by one
           END
@@ -137,10 +137,10 @@ DEFINE_PATCH_FUNCTION ps_tileset_add_tiles INT_VAR Pos = 0 MaxCount = 100000 Off
             ACTION_IF (TileDataSize >= LengthOfTilesSection) BEGIN // Ensure the tile data we loaded is of the appropriate size (compared to LengthOfTilesSection in tileset header)
               OUTER_SET MaxCount -= (TileDataSize / LengthOfTilesSection)
               OUTER_INNER_PATCH_SAVE NewTileData ~%NewTileData%~ BEGIN // Load internal buffer to store new tile data in
-                INSERT_BYTES NewTilesSize (TileDataSize)  // Make room for the new tile(s) in the internal buffer
+                INSERT_BYTES NewTilesSize (TileDataSize) // Make room for the new tile(s) in the internal buffer
                 WRITE_ASCIIE (NewTilesSize) ~%Tile%~ // Add the Tile Data to the internal buffer
                 NewTilesSize += (TileDataSize) // Update internal record of size (in bytes) of new tile data in the internal buffer
-                Count += (TileDataSize / LengthOfTilesSection)  // Increase the count of new tiles in the internal buffer by the number of tiles that were added
+                Count += (TileDataSize / LengthOfTilesSection) // Increase the count of new tiles in the internal buffer by the number of tiles that were added
               END
             END
           END
@@ -193,12 +193,12 @@ DEFINE_ACTION_FUNCTION ps_tileset_create_tileset INT_VAR LengthOfTilesSection = 
 >>>>>>>>
   COPY ~.../mymod-inlined/ps_tileset_new.tis~ ~%OutTileset%~
     PATCH_PRINT ~Creating new tileset and saving it to "%OutTileset%"~
-    INSERT_BYTES 0 24 // Make room for the header
-    WRITE_ASCIIE 0x0 ~TIS V1  ~				// Signature ("TIS ") + Version ("V1  ")
-    WRITE_LONG 0x8 0						// Count of tiles within this tileset (FileSize/LengthOfTilesSection)
-    WRITE_LONG 0xc (LengthOfTilesSection)	// Length of tiles section (1024+DimensionOfTile*DimensionOfTile or 12)
-    WRITE_LONG 0x10 24						// Size of the header (24) - assumption, but a very good one
-    WRITE_LONG 0x14 (DimensionOfTile)		// Dimension of 1 tile in pixels (64x64)
+    INSERT_BYTES 0 24                     // Make room for the header
+    WRITE_ASCIIE 0x0 ~TIS V1  ~           // Signature ("TIS ") + Version ("V1  ")
+    WRITE_LONG 0x8 0                      // Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+    WRITE_LONG 0xc (LengthOfTilesSection) // Length of tiles section (1024+DimensionOfTile*DimensionOfTile or 12)
+    WRITE_LONG 0x10 24                    // Size of the header (24) - assumption, but a very good one
+    WRITE_LONG 0x14 (DimensionOfTile)     // Dimension of 1 tile in pixels (64x64)
     LPF ps_tileset_add_tiles INT_VAR MaxCount Offset STR_VAR TileDir TileRegExp RET Count END // Add tiles to the tileset
 END
 
@@ -238,10 +238,7 @@ DEFINE_PATCH_FUNCTION ps_tileset_export_tiles INT_VAR Pos = 0 Count = 100000 STR
         READ_ASCII (SizeOfHeader + LengthOfTilesSection * f1) pt (1024) // Read palette for this tile
         READ_ASCII (SizeOfHeader + LengthOfTilesSection * f1 + 1024) fm (DimensionOfTile * DimensionOfTile) // Read tile data for this tile
         bm = (Pos + f1)
-        SPRINT bm ~0000%bm%~
-        INNER_PATCH_SAVE bm ~%bm%~ BEGIN // Format the tile number currently being exported to be exactly 4 digits (padded with 0s)
-          DELETE_BYTES 0 (BUFFER_LENGTH - 4)
-        END
+        SNPRINT "-4" bm ~0000%bm%~ // Format the tile number currently being exported to be exactly 4 digits (padded with 0s)
         LPF ps_tileset_export_tile_BMP INT_VAR fw = DimensionOfTile fh = DimensionOfTile STR_VAR fm pt OutTilePath = EVAL ~%OutTileDir%/%bn%_%bm%.%OutType%~ END
       END
     END ELSE PATCH_IF (~%OutType%~ STRING_EQUAL_CASE ~raw~ = 1) OR (~%OutType%~ STRING_EQUAL_CASE ~tis~ = 1) BEGIN // If exporting as raw or tileset
@@ -249,27 +246,21 @@ DEFINE_PATCH_FUNCTION ps_tileset_export_tiles INT_VAR Pos = 0 Count = 100000 STR
       fz = (LengthOfTilesSection * Count) // File size
       PATCH_IF (~%OutType%~ STRING_EQUAL_CASE ~tis~ = 1) BEGIN // If exporting as a tileset, add the TIS header
         INNER_PATCH_SAVE fm ~%fm%~ BEGIN
-          INSERT_BYTES 0x0 (SizeOfHeader) // Make room for the header
-          WRITE_ASCIIE 0x0 ~%Signature%~			// Signature ("TIS ")
-          WRITE_ASCIIE 0x4 ~%Version%~			// Version ("V1  ")
-          WRITE_LONG 0x8 (Count)					// Count of tiles within this tileset (FileSize/LengthOfTilesSection)
-          WRITE_LONG 0xc (LengthOfTilesSection)	// Length of tiles section (1024+DimensionOfTile*DimensionOfTile or 12)
-          WRITE_LONG 0x10 (SizeOfHeader)			// Size of the header (24) - assumption, but a very good one
-          WRITE_LONG 0x14 (DimensionOfTile)		// Dimension of 1 tile in pixels (64x64)
+          INSERT_BYTES 0x0 (SizeOfHeader)       // Make room for the header
+          WRITE_ASCIIE 0x0 ~%Signature%~        // Signature ("TIS ")
+          WRITE_ASCIIE 0x4 ~%Version%~          // Version ("V1  ")
+          WRITE_LONG 0x8 (Count)                // Count of tiles within this tileset (FileSize/LengthOfTilesSection)
+          WRITE_LONG 0xc (LengthOfTilesSection) // Length of tiles section (1024+DimensionOfTile*DimensionOfTile or 12)
+          WRITE_LONG 0x10 (SizeOfHeader)        // Size of the header (24) - assumption, but a very good one
+          WRITE_LONG 0x14 (DimensionOfTile)     // Dimension of 1 tile in pixels (64x64)
           fz += SizeOfHeader
         END
       END
       bm = (Pos)
-      SPRINT bm ~0000%bm%~
-      INNER_PATCH_SAVE bm ~%bm%~ BEGIN // Format the first tile number currently being exported to be exactly 4 digits (padded with 0s)
-        DELETE_BYTES 0 (BUFFER_LENGTH - 4)
-      END
+      SNPRINT "-4" bm ~0000%bm%~ // Format the first tile number currently being exported to be exactly 4 digits (padded with 0s)
       PATCH_IF (Count > 1) BEGIN // If exporting more than one tile
         bl = (Pos + Count)
-        SPRINT bl ~0000%bl%~
-        INNER_PATCH_SAVE bl ~%bl%~ BEGIN // Format the last tile number currently being exported to be exactly 4 digits (padded with 0s)
-          DELETE_BYTES 0 (BUFFER_LENGTH - 4)
-        END
+        SNPRINT "-4" bl ~0000%bl%~ // Format the last tile number currently being exported to be exactly 4 digits (padded with 0s)
         LPF ps_tileset_export_tile_RAW INT_VAR fz STR_VAR fm OutTilePath = EVAL ~%OutTileDir%/%bn%_%bm%-%bl%.%OutType%~ END
       END ELSE BEGIN
         LPF ps_tileset_export_tile_RAW INT_VAR fz STR_VAR fm OutTilePath = EVAL ~%OutTileDir%/%bn%_%bm%.%OutType%~ END
@@ -294,15 +285,15 @@ END
 DEFINE_PATCH_FUNCTION ps_tileset_load_tile_BMP INT_VAR Size = 5120 RET fk kl BEGIN
   SPRINT fk ~~
   SET kl = 0
-  READ_ASCII 0x0 sg (2) //Signature
+  READ_ASCII 0x0 sg (2)   //Signature
   PATCH_IF (~%sg%~ STRING_EQUAL_CASE ~BM~ = 1) BEGIN
-    READ_SHORT 0x1c bc //Bit count
-    READ_LONG 0x1e cp //Compression
+    READ_SHORT 0x1c bc    //Bit count
+    READ_LONG 0x1e cp     //Compression
     PATCH_IF (bc = 8) AND (cp = 0) BEGIN
-      READ_LONG 0xa fd //Raster data offset
+      READ_LONG 0xa fd    //Raster data offset
       READ_LONG 0xE hsize //SizeOfHeader
-      READ_LONG 0x12 rw //Width
-      READ_LONG 0x16 rh //Height
+      READ_LONG 0x12 rw   //Width
+      READ_LONG 0x16 rh   //Height
       PATCH_IF (rw * rh + 1024 = Size) BEGIN
         READ_LONG 0x2E ColorsUsed //Number of colors in the image
         PATCH_IF (ColorsUsed = 0) BEGIN
@@ -438,24 +429,24 @@ DEFINE_PATCH_FUNCTION ps_tileset_export_tile_BMP INT_VAR fw = 64 fh = 64 STR_VAR
 >>>>>>>>
     COPY ~.../mymod-inlined/ps_bitmap_new.bmp~ ~%OutTilePath%~
       INSERT_BYTES 0 fz
-      WRITE_ASCIIE 0 ~BM~ #2	// File type, always 4D42h ("BM")
-      WRITE_LONG 2 fz			// FileSize	Size of the file in bytes
-      //WRITE_SHORT 6 0			// Reserved1	Always 0
-      //WRITE_SHORT 8 0			// Reserved2	Always 0
-      WRITE_LONG 10 1078		// BitmapOffset	Starting position of image data in bytes
-      WRITE_LONG 14 40			// Size	Size of this header in bytes
-      WRITE_LONG 18 fw			// Width	Image width in pixels
-      WRITE_LONG 22 fh			// Height	Image height in pixels
-      WRITE_SHORT 26 1			// Planes	Number of color planes
-      WRITE_SHORT 28 8			// BitsPerPixel	Number of bits per pixel
-      //WRITE_LONG 30 0			// Compression	Compression methods used
-      //WRITE_LONG 34 0			// SizeOfBitmap	Size of bitmap in bytes
-      //WRITE_LONG 38 0			// HorzResolution	Horizontal resolution in pixels per meter
-      //WRITE_LONG 42 0			// VertResolution	Vertical resolution in pixels per meter
-      //WRITE_LONG 46 0			// ColorsUsed	Number of colors in the image
-      //WRITE_LONG 50 0			// ColorsImportant	Minimum number of important colors
+      WRITE_ASCIIE 0 ~BM~ #2       // File type, always 4D42h ("BM")
+      WRITE_LONG 2 fz              // FileSize	Size of the file in bytes
+      //WRITE_SHORT 6 0            // Reserved1	Always 0
+      //WRITE_SHORT 8 0            // Reserved2	Always 0
+      WRITE_LONG 10 1078           // BitmapOffset	Starting position of image data in bytes
+      WRITE_LONG 14 40             // Size	Size of this header in bytes
+      WRITE_LONG 18 fw             // Width	Image width in pixels
+      WRITE_LONG 22 fh             // Height	Image height in pixels
+      WRITE_SHORT 26 1             // Planes	Number of color planes
+      WRITE_SHORT 28 8             // BitsPerPixel	Number of bits per pixel
+      //WRITE_LONG 30 0            // Compression	Compression methods used
+      //WRITE_LONG 34 0            // SizeOfBitmap	Size of bitmap in bytes
+      //WRITE_LONG 38 0            // HorzResolution	Horizontal resolution in pixels per meter
+      //WRITE_LONG 42 0            // VertResolution	Vertical resolution in pixels per meter
+      //WRITE_LONG 46 0            // ColorsUsed	Number of colors in the image
+      //WRITE_LONG 50 0            // ColorsImportant	Minimum number of important colors
       WRITE_ASCIIE 54 ~%pt%~ #1024 // Color table
-      WRITE_ASCIIE 1078 ~%fk%~	// Raster data
+      WRITE_ASCIIE 1078 ~%fk%~     // Raster data
     BUT_ONLY
   END
 END
@@ -473,7 +464,7 @@ DEFINE_PATCH_FUNCTION ps_tileset_export_tile_RAW INT_VAR fz = 0 STR_VAR fm = "" 
 >>>>>>>>
     COPY ~.../mymod-inlined/ps_bitmap_new.bmp~ ~%OutTilePath%~
       INSERT_BYTES 0 fz
-      WRITE_ASCIIE 0 ~%fm%~	// Tile data
+      WRITE_ASCIIE 0 ~%fm%~ // Tile data
     BUT_ONLY
   END
 END
@@ -535,10 +526,7 @@ DEFINE_PATCH_FUNCTION ps_tileset_info INT_VAR Verbose = 1 Log = 1 STR_VAR nl = E
           PATCH_IF (PVRz_Page = "-1") BEGIN // Special: A value of -1/0xFFFFFFFF indicates to fill the whole tile with black pixels
             SPRINT pvref ~blank~
           END ELSE BEGIN
-            SPRINT pg ~00%PVRz_Page%~ // PVRZ page value as a zero-padded two digits number
-            INNER_PATCH_SAVE pg ~%pg%~ BEGIN // Format the tile number currently being exported to be exactly 2 digits (padded with 0s)
-              DELETE_BYTES 0 (BUFFER_LENGTH - 2)
-            END
+            SNPRINT "-2" pg ~00%PVRz_Page%~ // Format the tile number currently being exported to be exactly 2 digits (padded with 0s)
             SPRINT pvref ~%pvrz%%pg%.pvrz~ // Explicit PVRZ file reference
           END
           LPF ps_concat_str STR_VAR var = EVAL ~%info%~ str = EVAL ~%nl%%nl%Tile %t1%:%nl%  PVRz_Page = %PVRz_Page% (%pvref%)%nl%  PVRz_X = %PVRz_X%%nl%  PVRz_Y = %PVRz_Y%~ RET info = var END
