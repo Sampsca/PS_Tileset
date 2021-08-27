@@ -1,8 +1,8 @@
 //////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////      ps_misc_func      /////////////////////////////
-////////////////////////////          v0.0.1          ////////////////////////////
-//////////////////////////// Copyright (c) 2017 Sam.  ////////////////////////////
-////////////////////////////          WTFPL           ////////////////////////////
+//////////////////////////         ps_misc_func          /////////////////////////
+//////////////////////////            v0.0.3             /////////////////////////
+////////////////////////// Copyright (c) 2017-2021 Sam.  /////////////////////////
+//////////////////////////            WTFPL              /////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
 
 
@@ -17,17 +17,17 @@
 DEFINE_ACTION_FUNCTION ps_concat_str STR_VAR var = "" str = "" RET var BEGIN
   OUTER_INNER_PATCH_SAVE var ~%var%~ BEGIN
     sz = BUFFER_LENGTH
-	strsz = STRING_LENGTH ~%str%~
-	INSERT_BYTES sz strsz
-	WRITE_ASCIIE sz ~%str%~
+    strsz = STRING_LENGTH ~%str%~
+    INSERT_BYTES sz strsz
+    WRITE_ASCIIE sz ~%str%~
   END
 END
 DEFINE_PATCH_FUNCTION ps_concat_str STR_VAR var = "" str = "" RET var BEGIN
   INNER_PATCH_SAVE var ~%var%~ BEGIN
     sz = BUFFER_LENGTH
-	strsz = STRING_LENGTH ~%str%~
-	INSERT_BYTES sz strsz
-	WRITE_ASCIIE sz ~%str%~
+    strsz = STRING_LENGTH ~%str%~
+    INSERT_BYTES sz strsz
+    WRITE_ASCIIE sz ~%str%~
   END
 END
 
@@ -49,12 +49,12 @@ DEFINE_PATCH_FUNCTION ps_zlib_compress BEGIN
     PATCH_PRINT ~%SOURCE_FILESPEC% appears to already be Z-lib compressed.  It will not be compressed again.~
   END ELSE BEGIN
     dl = SOURCE_SIZE // Data length
-	SPRINT sg ~%SOURCE_EXT%   ~
-	TO_UPPER sg
+    SPRINT sg ~%SOURCE_EXT%   ~
+    TO_UPPER sg
     COMPRESS_REPLACE_FILE 0 dl 9
     INSERT_BYTES 0x0 0xc
     WRITE_ASCIIE 0x0 ~%sg%~ #3
-	WRITE_ASCII 0x3 ~CV1  ~
+    WRITE_ASCII 0x3 ~CV1  ~
     WRITE_LONG 0x8 dl
   END
 END
@@ -67,4 +67,119 @@ DEFINE_PATCH_FUNCTION ps_zlib_decompress BEGIN
   END ELSE BEGIN
     PATCH_PRINT ~%SOURCE_FILESPEC% does not appear to be Z-lib compressed.~
   END
+END
+
+//////////////////////////////////////////////////////////////////////////////////
+///////////////////////////    ps_bitmap_swap_pixel    ///////////////////////////
+///////////////////////////                            ///////////////////////////
+///////////////////////////  V0.1   Updated: 20170718  ///////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+// This WeiDU Patch function swaps the pixels pointing to palette index INT_VAR 'swapfrom' to INT_VAR 'swapto'.
+//   The bitmap being patched should be a 4-bit paletted Microsoft Windows 3.x bitmap (BMP Version 3) with no compression
+//     (such as the search map for an ARE file).
+//   Special thanks to Argent77 for code to read/write nibbles.
+//////////////////////////////////////////////////////////////////////////////////
+DEFINE_PATCH_FUNCTION ~ps_bitmap_swap_pixel~ INT_VAR swapfrom = 0 swapto = 0 BEGIN
+  /*This function rewrites nibbles in pairs.  This means that if the image width is an odd number of pixels and you are swapping them from palette entry 0 to some other palette entry, one nibble of padding will be overwritten by a non-zero number at the end of the line.  While that makes this implementation imperfect, it also isn’t harmful and since fixing it would complicate (and thus slow down) the code, I’m disinclined to do anything about it.*/
+  READ_ASCII 0x0 sg (2) //Signature
+  PATCH_IF (~%sg%~ STRING_EQUAL_CASE ~BM~ = 1) BEGIN
+    //PATCH_PRINT ~Processing %SOURCE_FILE%...~
+    READ_SHORT 0x1c bc //Bit count
+    READ_LONG 0x1e cp //Compression
+    PATCH_IF (bc = 4) AND (cp = 0) BEGIN // Bitmap is 4-bit and uncompressed
+      READ_LONG 0xa fd //Raster data offset
+      READ_LONG 0x12 qw //Width
+      PATCH_IF (qw MODULO 2 > 0) BEGIN
+        qw = qw / 2 + 1
+      END ELSE BEGIN
+        qw = qw / 2
+      END
+      df = (qw / 4) * 4
+      PATCH_IF df < qw BEGIN
+        lz = df + 4 //Line size
+        df = lz - qw //Byte difference
+      END ELSE BEGIN
+        lz = qw
+        df = 0
+      END
+      READ_LONG 0x16 qh //Height
+      FOR (k1 = qh; k1 > 0; k1 -= 1) BEGIN //Row height loop
+        FOR (k2 = 0; k2 < qw; k2 += 1) BEGIN //Row width loop
+          offset = (fd + (k1 - 1) * (qw + df) + k2) //Last row first
+          SET nibbleL = (BYTE_AT offset) & 0x0f
+          SET nibbleH = ((BYTE_AT offset) >> 4) & 0x0f
+          PATCH_IF (nibbleL = swapfrom) BEGIN
+            WRITE_BYTE offset ((THIS & 0xf0) | swapto)
+          END
+          PATCH_IF (nibbleH = swapfrom) BEGIN
+            WRITE_BYTE offset ((THIS & 0x0f) | (swapto << 4))
+          END
+        END
+      END
+    END ELSE BEGIN
+      PATCH_PRINT ~Bitmap %SOURCE_FILE% is not 4-bit or is compressed - check the file.~
+    END
+  END ELSE BEGIN
+    PATCH_PRINT ~%SOURCE_FILE% is not a valid bitmap - check the file.~
+  END
+END    // End of ps_bitmap_swap_pixel
+
+/* =================================================================================================================================================================== *
+ *  FUNCTION ps_recursive_search_ex                                                                                                                                    *
+ * ------------------------------------------------------------------------------------------------------------------------------------------------------------------- *
+ *  This is a WeiDU action function that will recursively search into a parent directory and report how many files/directories that match the given RegEx are found.   *
+ * ------------------------------------------------------------------------------------------------------------------------------------------------------------------- *
+ *   INT_VAR                                                                                                                                                           *
+ *      - IncludeFiles indicates whether files should be included in the returned Count and FileDirList.  0=NO | 1=YES                                                 *
+ *      - IncludeDirs indicates whether directories should be included in the returned Count and FileDirList.  0=NO | 1=YES                                            *
+ *      - IncludeParentFiles indicates whether files in ParentDir should be included in the returned Count and FileDirList.  0=NO | 1=YES                              *
+ *   STR_VAR                                                                                                                                                           *
+ *      - ParentDir is a string containing the name of the parent directory that will be recursively searched.                                                         *
+ *      - ChildDirRegEx is a string containing the RegEx of child directories to search within ParentDir.                                                              *
+ *      - FileRegex is a string containing the RegEx of files to match.                                                                                                *
+ *      - Delimiter is a string containing the characters to use to delimit files/directories in FileDirList.                                                          *
+ *   RET                                                                                                                                                               *
+ *      - Count is the total Count of files/directories found.                                                                                                         *
+ *      - FileDirList is the Delimited list of files/directories found.                                                                                                *
+ *   Last Updated 20210416                                                                                                                                             *
+ * =================================================================================================================================================================== */
+
+DEFINE_ACTION_FUNCTION ps_recursive_search_ex
+    INT_VAR IncludeFiles       = 1
+            IncludeDirs        = 0
+            IncludeParentFiles = 1
+    STR_VAR ParentDir          = ""
+            ChildDirRegEx      = ""
+            FileRegEx          = "^.+$"
+            Delimiter          = EVAL "%WNL%"
+    RET     Count
+            FileDirList
+BEGIN
+
+  OUTER_SET Count = 0
+  OUTER_TEXT_SPRINT FileDirList ~~
+  ACTION_IF (IncludeFiles = 1) AND (IncludeParentFiles = 1) BEGIN
+    ACTION_BASH_FOR ~%ParentDir%~ ~%FileRegEx%~ BEGIN
+      OUTER_SET Count += 1
+      OUTER_TEXT_SPRINT FileDirList ~%FileDirList%%Delimiter%%BASH_FOR_FILESPEC%~
+    END
+  END
+  ACTION_CLEAR_ARRAY  ChildDir
+  GET_DIRECTORY_ARRAY ChildDir ~%ParentDir%~ ~%ChildDirRegEx%~
+  ACTION_PHP_EACH ChildDir AS dirfrom => dirC BEGIN
+    OUTER_SNPRINT "-1" LastChar ~%dirC%~
+    ACTION_IF (~%LastChar%~ STRING_EQUAL_CASE ~.~ = 0) BEGIN
+      ACTION_IF (IncludeDirs = 1) BEGIN
+        OUTER_SET Count += 1
+        OUTER_TEXT_SPRINT FileDirList ~%FileDirList%%Delimiter%%dirC%~
+      END
+      LAF ps_recursive_search_ex INT_VAR IncludeFiles IncludeDirs IncludeParentFiles = 1 STR_VAR ParentDir = EVAL "%dirC%" ChildDirRegEx = "" FileRegEx Delimiter RET CountN = %Count% FileDirListN = %FileDirList% END
+      OUTER_SET Count += CountN
+      OUTER_TEXT_SPRINT FileDirList ~%FileDirList%%Delimiter%%FileDirListN%~
+    END
+  END
+  OUTER_INNER_PATCH_SAVE FileDirList ~%FileDirList%~ BEGIN
+    REPLACE_TEXTUALLY ~\(%Delimiter%\)+~ ~%Delimiter%~
+  END
+
 END
