@@ -1,6 +1,6 @@
 BACKUP ~PS_Tileset\backup~
 AUTHOR ~Sam.~
-VERSION ~v0.0.4~
+VERSION ~v0.0.5~
 
 ALWAYS
   INCLUDE ~%MOD_FOLDER%/lib/ps_tileset_lib.tpa~ // Include the PS_Tileset function library
@@ -164,15 +164,15 @@ COPY ~%MOD_FOLDER%/tilesets/AR0150.tis~ ~%MOD_FOLDER%/processed/AR0150.tis~
   LPF ps_tileset_recolor_pixel INT_VAR Pos = 13 Count = 1 NewColor = 0x00644A04 Pixel = 2 RET Count END // The color we need already exists in the palette
   
   FOR (z1 = 0; z1 < 250; ++z1) BEGIN // Create several scenarios to test the function 
-	WRITE_BYTE (1048 + 1 + z1) z1
+    WRITE_BYTE (1048 + 1 + z1) z1
   END
   LPF ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 NewColor = 0x00FF0000 Pixel = 0 RET Count END
   INNER_ACTION BEGIN
       RANDOM_SEED ~oak~
-	END
-  FOR (z1 = 0; z1 < 300; ++z1) BEGIN // Write enough random pixels to the tile to test unused palette entgries, duplicate palette entries, and to calculate "nearest neighbor" colors
+    END
+  FOR (z1 = 0; z1 < 300; ++z1) BEGIN // Write enough random pixels to the tile to test unused palette entries, duplicate palette entries, and to calculate "nearest neighbor" colors
     tmpc = RANDOM (0 10000000)
-	tmpp = RANDOM (2 4000)
+    tmpp = RANDOM (2 4000)
     LPF ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 1 NewColor = tmpc Pixel = tmpp RET Count END
   END
   
@@ -180,6 +180,46 @@ BUT_ONLY
 
 COPY ~%MOD_FOLDER%/processed/AR0115.tis~ ~%MOD_FOLDER%/processed/AR0115.tis~
   LPF ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 10000 NewColor = 0x000000FF Pixel = 100 RET Count END // Try to recolor a pixel in a PVRz-based tileset
+BUT_ONLY
+
+END
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Adjust Brightness~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Adjust Brightness~ BEGIN
+
+COPY ~%MOD_FOLDER%/tilesets/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  //LPF ps_tileset_export_tiles INT_VAR Pos = 0 STR_VAR OutTileDir = EVAL "%MOD_FOLDER%/processed/orig" OutType = "bmp" RET Count END // Export the original tiles as bitmaps
+  LPF ps_tileset_adjust_brightness INT_VAR Pos = 0 Value = "-100" IncludeBlack = 1 RET Count END // Darken all tiles by a value of 100
+  LPF ps_tileset_export_tiles INT_VAR Pos = 0 STR_VAR OutTileDir = EVAL "%MOD_FOLDER%/processed/darkened" OutType = "bmp" RET Count END // Export darkened tiles as bitmaps
+BUT_ONLY
+
+
+COPY ~%MOD_FOLDER%/tilesets/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  LPF ps_tileset_adjust_brightness_scale INT_VAR Pos = 0 Value = 200 IncludeBlack = 0 RET Count END // Double the brightness of all tiles, except pure black pixels
+  LPF ps_tileset_export_tiles INT_VAR Pos = 0 STR_VAR OutTileDir = EVAL "%MOD_FOLDER%/processed/brightened" OutType = "bmp" RET Count END // Export brightened tiles as bitmaps
+BUT_ONLY
+
+END
+
+//! Test PS_Tileset /////////////////////////////////////////////////////
+BEGIN ~Correct Off-Black Background~
+SUBCOMPONENT ~Test PS_Tileset~
+NO_LOG_RECORD
+
+ACTION_TIME ~Correct Off-Black Background~ BEGIN
+
+COPY ~%MOD_FOLDER%/tilesets/psar04.tis~ ~%MOD_FOLDER%/processed/psar04.tis~
+  //LPF ps_tileset_replace_palette_entry INT_VAR Pos = 24 Count = 1 Oldcolor = 0x00363634 NewColor = 0x00000000 RET Count END // Make some brown background pixels black
+  //LPF ps_tileset_replace_palette_entry INT_VAR Pos = 75 Count = 1 Oldcolor = 0x00010000 NewColor = 0x00000000 RET Count END // Make some nearly black background pixels black
+  //LPF ps_tileset_replace_palette_entry INT_VAR Pos = 89 Count = 1 Oldcolor = 0x00010101 NewColor = 0x00000000 RET Count END // Make some more nearly black background pixels black
+  //LPF ps_tileset_recolor_pixel INT_VAR Pos = 0 Count = 10000 NewColor = 0x000000FF Pixel = 0 RET Count END
+  LPF ps_tileset_correct_off_black INT_VAR Pos = 0 Threshold = 54 Span = 6 RET Count END
+  PATCH_PRINT ~%Count% palette entries were modified.~
+  LPF ps_tileset_export_tiles INT_VAR Pos = 0 STR_VAR OutTileDir = EVAL "%MOD_FOLDER%/processed/background" OutType = "bmp" RET Count END // Export resulting tiles as bitmaps
 BUT_ONLY
 
 END

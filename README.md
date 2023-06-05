@@ -15,6 +15,12 @@
 	Replaces palette entries in a tile with a new color
 #### ps_tileset_recolor_pixel
 	Recolors a pixel in a tile without changing the color of every pixel using the same palette entry
+#### ps_tileset_adjust_brightness
+	Adjusts the brightness of the colors in a number of tiles
+#### ps_tileset_adjust_brightness_scale
+	Adjusts the brightness of the colors in a number of tiles by the given scale value
+#### ps_tileset_correct_off_black
+	Attempts to find off-black blackgrounds (on the outside of interior areas) and corrects them
 #### ps_zlib_compress
 	Z-lib compresses a file
 #### ps_zlib_decompress
